@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 class ArCameraPreview extends StatelessWidget {
@@ -18,8 +19,12 @@ class ArCameraPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final previewController = controller;
-    if (!isReady || previewController == null || !previewController.value.isInitialized) {
-      return _CameraPreviewFallback(message: errorMessage ?? 'Opening camera preview...');
+    if (!isReady ||
+        previewController == null ||
+        !previewController.value.isInitialized) {
+      return _CameraPreviewFallback(
+        message: errorMessage ?? 'Opening camera preview...',
+      );
     }
 
     final previewSize = previewController.value.previewSize;
@@ -27,7 +32,12 @@ class ArCameraPreview extends StatelessWidget {
       return _CameraPreviewFallback(message: 'Camera preview unavailable.');
     }
 
-    final fittedPreviewSize = Size(previewSize.height, previewSize.width);
+    // On native, the camera stream is typically rotated relative to portrait UI,
+    // so we keep the historical width/height swap. On web, swapping distorts the
+    // viewport sizing and causes boxed/cropped rendering on mobile browsers.
+    final fittedPreviewSize = kIsWeb
+        ? Size(previewSize.width, previewSize.height)
+        : Size(previewSize.height, previewSize.width);
 
     return ColoredBox(
       color: Colors.black,
@@ -75,11 +85,7 @@ class _CameraPreviewFallback extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [
-            Color(0xFF16191E),
-            Color(0xFF11151C),
-            Color(0xFF090B10),
-          ],
+          colors: [Color(0xFF16191E), Color(0xFF11151C), Color(0xFF090B10)],
         ),
       ),
       child: Stack(
