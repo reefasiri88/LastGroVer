@@ -30,6 +30,7 @@ class ArExperienceController extends ChangeNotifier {
   bool _hasStarted = false;
   bool _isInitializingCamera = false;
   bool _isCameraReady = false;
+  bool _isWebCameraFallback = false;
   ArOverlayMode _overlayMode = ArOverlayMode.none;
   String? _errorMessage;
   double _routeProgress = 0;
@@ -51,6 +52,9 @@ class ArExperienceController extends ChangeNotifier {
   bool get hasStarted => _hasStarted;
   bool get isPlacingPath => _isInitializingCamera;
   bool get isPathPlaced => _isCameraReady;
+  bool get isWebCameraFallback => _isWebCameraFallback;
+  bool get hasCameraFailure =>
+      _hasStarted && !_isInitializingCamera && !_isCameraReady && _errorMessage != null;
   ArOverlayMode get overlayMode => _overlayMode;
   String? get errorMessage => _errorMessage;
   int get coinTotal => _coinTotal;
@@ -95,12 +99,15 @@ class ArExperienceController extends ChangeNotifier {
       return;
     }
 
-    _hasStarted = true;
+    if (!_hasStarted) {
+      _hasStarted = true;
+      await _arSessionService.startSession();
+    }
     _isInitializingCamera = true;
+    _isWebCameraFallback = false;
     _errorMessage = null;
     _updateGuidanceLabel();
     _safeNotify();
-    await _arSessionService.startSession();
     await _initializeDemo();
   }
 
@@ -116,6 +123,7 @@ class ArExperienceController extends ChangeNotifier {
     _hasStarted = false;
     _isInitializingCamera = false;
     _isCameraReady = false;
+    _isWebCameraFallback = false;
     await _progressionController.stop();
     await _arSessionService.endSession(summary: sessionSummary);
 
@@ -129,7 +137,12 @@ class ArExperienceController extends ChangeNotifier {
   }
 
   Future<void> _initializeDemo() async {
+    final previousController = _cameraController;
+    _cameraController = null;
+    await previousController?.dispose();
+
     _errorMessage = null;
+    _isWebCameraFallback = false;
 
     try {
       final cameras = await availableCameras();
@@ -153,11 +166,18 @@ class ArExperienceController extends ChangeNotifier {
 
       final controller = CameraController(
         selectedCamera,
-        ResolutionPreset.high,
+        kIsWeb ? ResolutionPreset.medium : ResolutionPreset.high,
         enableAudio: false,
       );
       await controller.initialize();
-      await controller.setFlashMode(FlashMode.off);
+      if (!kIsWeb) {
+        try {
+          await controller.setFlashMode(FlashMode.off);
+        } catch (error, stackTrace) {
+          _log('Flash mode setup skipped: $error');
+          _log(stackTrace.toString());
+        }
+      }
 
       if (_isDisposed) {
         await controller.dispose();
@@ -176,12 +196,26 @@ class ArExperienceController extends ChangeNotifier {
     } catch (error, stackTrace) {
       _log('Camera initialization failed: $error');
       _log(stackTrace.toString());
-      _errorMessage = 'Allow camera access to run the demo preview.';
+      _errorMessage = _buildCameraErrorMessage(error);
       _isInitializingCamera = false;
       _isCameraReady = false;
+      _isWebCameraFallback = kIsWeb;
       _updateGuidanceLabel();
       _safeNotify();
     }
+  }
+
+  Future<void> retryCameraInitialization() async {
+    if (!_hasStarted || _isInitializingCamera) {
+      return;
+    }
+
+    _isInitializingCamera = true;
+    _isWebCameraFallback = false;
+    _errorMessage = null;
+    _updateGuidanceLabel();
+    _safeNotify();
+    await _initializeDemo();
   }
 
   Future<void> resetPlacement() async {
@@ -388,7 +422,9 @@ class ArExperienceController extends ChangeNotifier {
     if (!_isCameraReady) {
       _guidanceLabel = _isInitializingCamera
           ? 'Opening camera'
-          : _hasStarted
+          : _isWebCameraFallback
+              ? 'Web demo fallback'
+              : _hasStarted
               ? 'Camera unavailable'
               : 'Start the route';
       return;
@@ -434,6 +470,28 @@ class ArExperienceController extends ChangeNotifier {
     if (!_isDisposed) {
       notifyListeners();
     }
+  }
+
+  String _buildCameraErrorMessage(Object error) {
+    if (error is CameraException) {
+      final code = error.code.toLowerCase();
+      if (code.contains('permission') || code.contains('denied')) {
+        return 'Camera permission was not completed. Allow camera access in Safari and try again.';
+      }
+      if (kIsWeb) {
+        return 'Camera preview could not start in this browser. On iPhone Safari, Flutter Web camera support can fail even after permission is granted.';
+      }
+      final description = error.description;
+      if (description != null && description.trim().isNotEmpty) {
+        return description.trim();
+      }
+    }
+
+    if (kIsWeb) {
+      return 'Camera preview could not start in this browser. On iPhone Safari, Flutter Web camera support can fail even after permission is granted.';
+    }
+
+    return 'Allow camera access to run the demo preview.';
   }
 
   ArSessionSummary _buildSessionSummary() {

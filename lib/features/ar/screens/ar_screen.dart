@@ -118,7 +118,11 @@ class _ArScreenState extends State<ArScreen> {
                       if (!_controller.isPathPlaced)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 16),
-                          child: _SurfacePromptCard(controller: _controller),
+                          child: _SurfacePromptCard(
+                            controller: _controller,
+                            onRetry: _controller.retryCameraInitialization,
+                            onExit: () => _handleExit(context),
+                          ),
                         ),
                       _DistancePanel(controller: _controller),
                     ],
@@ -477,12 +481,21 @@ class _StatsPanel extends StatelessWidget {
 }
 
 class _SurfacePromptCard extends StatelessWidget {
-  const _SurfacePromptCard({required this.controller});
+  const _SurfacePromptCard({
+    required this.controller,
+    required this.onRetry,
+    required this.onExit,
+  });
 
   final ArExperienceController controller;
+  final Future<void> Function() onRetry;
+  final Future<void> Function() onExit;
 
   @override
   Widget build(BuildContext context) {
+    final isWebFallback = controller.isWebCameraFallback;
+    final canRetry = controller.hasCameraFailure;
+
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 320),
@@ -518,14 +531,65 @@ class _SurfacePromptCard extends StatelessWidget {
               Text(
                 controller.isPlacingPath
                     ? 'The live camera feed is initializing'
-                    : 'Camera access is required after you press Start',
+                    : isWebFallback
+                        ? 'This GitHub Pages web build can fall back when Safari cannot keep the camera stream active. The full AR demo is more reliable in the mobile app build.'
+                        : 'Camera access is required after you press Start',
                 style: TextStyle(
                   fontFamily: 'Alexandria',
                   fontSize: 11,
                   fontWeight: FontWeight.w400,
                   color: Colors.white.withValues(alpha: 0.72),
                 ),
+                textAlign: TextAlign.center,
               ),
+              if (canRetry) ...[
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: onRetry,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF8A47FF),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          textStyle: const TextStyle(
+                            fontFamily: 'Alexandria',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        child: const Text('Try Again'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: onExit,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          side: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.28),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          textStyle: const TextStyle(
+                            fontFamily: 'Alexandria',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        child: const Text('Back'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),

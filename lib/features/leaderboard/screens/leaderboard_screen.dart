@@ -80,7 +80,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                             children: [
                               _buildPodiumEntry(topThree, 1, rank: 2, height: 166),
                               const SizedBox(width: 8),
-                              _buildPodiumEntry(topThree, 0, rank: 1, height: 206, showCrown: true),
+                              _buildPodiumEntry(topThree, 0, rank: 1, height: 206),
                               const SizedBox(width: 8),
                               _buildPodiumEntry(topThree, 2, rank: 3, height: 148),
                             ],
